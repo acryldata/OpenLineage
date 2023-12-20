@@ -36,6 +36,8 @@ public class IcebergHandler implements CatalogHandler {
   private final OpenLineageContext context;
 
   private static final String TYPE = "type";
+  private static final String CATALOG_IMPL = "catalog-impl";
+  private static final String IO_IMPL = "io-impl";
 
   public IcebergHandler(OpenLineageContext context) {
     this.context = context;
@@ -79,14 +81,24 @@ public class IcebergHandler implements CatalogHandler {
                     Map.Entry::getValue));
 
     log.info(catalogConf.toString());
-    if (catalogConf.isEmpty() || !catalogConf.containsKey(TYPE)) {
+    if (catalogConf.isEmpty() || (!catalogConf.containsKey(TYPE) && !catalogConf.get(CATALOG_IMPL).equals("org.apache.iceberg.aws.glue.GlueCatalog"))) {
       throw new UnsupportedCatalogException(catalogName);
     }
     log.info(catalogConf.get(TYPE));
 
     String warehouse = catalogConf.get(CatalogProperties.WAREHOUSE_LOCATION);
-    DatasetIdentifier di = PathUtils.fromPath(new Path(warehouse, identifier.toString()));
+    DatasetIdentifier di;
 
+    if (catalogConf.get(CATALOG_IMPL).equals("org.apache.iceberg.aws.glue.GlueCatalog")) {
+      di = new DatasetIdentifier(
+          identifier.toString(),
+          "glue"
+      );
+      log.info("Glue catalog detected, returning glue dataset identifier {}", di);
+      return di;
+    } else {
+      di = PathUtils.fromPath(new Path(warehouse, identifier.toString()));
+    }
     if (catalogConf.get(TYPE).equals("hive")) {
       di.withSymlink(
           getHiveIdentifier(
